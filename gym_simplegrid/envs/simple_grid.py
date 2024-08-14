@@ -36,7 +36,7 @@ class SimpleGridEnv(Env):
      
     The user can also decide the starting and goal positions of the agent. This can be done by through the `options` dictionary in the `reset` method. The user can specify the starting and goal positions by adding the key-value pairs(`starts_xy`, v1) and `goals_xy`, v2), where v1 and v2 are both of type int (s) or tuple (x,y) and represent the agent starting and goal positions respectively. 
     """
-    metadata = {"render_modes": ["human", "rgb_array", "ansi"], 'render_fps': 20}
+    metadata = {"render_modes": ["human", "rgb_array", "ansi"], 'render_fps': 30}
     FREE: int = 0
     OBSTACLE: int = 1
     MOVES: dict[int,tuple] = {
@@ -49,7 +49,8 @@ class SimpleGridEnv(Env):
     def __init__(self,     
         obstacle_map: str | list[str],
         render_mode: str | None = None,
-        colors: list = ['cornsilk', 'orange', 'red', 'green']
+        colors: list = ['cornsilk', 'orange', 'red', 'green'],
+        iter_limit = 500
     ):
         """
         Initialise the environment.
@@ -73,11 +74,12 @@ class SimpleGridEnv(Env):
         self.colors = colors
 
         self.action_space = spaces.Discrete(len(self.MOVES))
-        self.observation_space = spaces.Discrete(n=self.nrow*self.ncol)
+        self.observation_space = spaces.MultiDiscrete(np.array([self.nrow, self.ncol]))
 
         # Rendering configuration
         self.fig = None
-
+        
+        self.iter_limit = iter_limit
         self.render_mode = render_mode
         self.fps = self.metadata['render_fps']
 
@@ -101,13 +103,14 @@ class SimpleGridEnv(Env):
         super().reset(seed=seed)
 
         # parse options
-        self.start_xy = self.parse_state_option('start_loc', options)
-        self.goal_xy = self.parse_state_option('goal_loc', options)
+        self.start_xy = (0,0) #self.parse_state_option('start_loc', options)
+        self.goal_xy = (self.nrow-1, self.ncol-1) #self.parse_state_option('goal_loc', options)
 
         # initialise internal vars
         self.agent_xy = self.start_xy
         self.reward = self.get_reward(*self.agent_xy)
-        self.done = self.on_goal()
+        self.terminated = self.on_goal()
+        self.truncated = False
         self.agent_action = None
         self.n_iter = 0
 
@@ -117,13 +120,15 @@ class SimpleGridEnv(Env):
         # if self.render_mode == "human":
         self.render()
 
-        return self.get_obs(), self.get_info()
+        return np.array(list(self.agent_xy)), self.get_info()
     
+    # Want to convert observations to multidiscrete, allowing the agent to 'see' its immediate surroundings. 
     def step(self, action: int):
         """
         Take a step in the environment.
         """
         #assert action in self.action_space
+
         self.agent_action = action
 
         # Get the current position of the agent
@@ -140,14 +145,16 @@ class SimpleGridEnv(Env):
         # Check if the move is valid (now we allow stepping on walls/lava blocks with penalty)
         if self.is_in_bounds(target_row, target_col):
             self.agent_xy = (target_row, target_col)
-            self.done = self.on_goal()
+            self.terminated = self.on_goal()
 
         self.n_iter += 1
-
+       
         # if self.render_mode == "human":
         self.render()
-
-        return self.get_obs(), self.reward, self.done, False, self.get_info()
+        
+        self.truncated = (self.n_iter > self.iter_limit)
+        
+        return np.array(list(self.agent_xy)), self.reward, self.terminated, self.truncated, self.get_info()
     
     def parse_obstacle_map(self, obstacle_map) -> np.ndarray:
         """
@@ -282,7 +289,7 @@ class SimpleGridEnv(Env):
             return None
         
         elif self.render_mode == "ansi":
-            s = f"{self.n_iter},{self.agent_xy[0]},{self.agent_xy[1]},{self.reward},{self.done},{self.agent_action}\n"
+            s = f"{self.n_iter},{self.agent_xy[0]},{self.agent_xy[1]},{self.reward},{self.terminated},{self.truncated},{self.agent_action}\n"
             #print(s)
             return s
 
@@ -305,6 +312,7 @@ class SimpleGridEnv(Env):
             self.render_initial_frame()
             self.fig.canvas.mpl_connect('close_event', self.close)
         else:
+            self.update_surrounding_patches()
             self.update_agent_patch()
         self.ax.set_title(f"Step: {self.n_iter}, Reward: {self.reward}")
     
@@ -324,12 +332,47 @@ class SimpleGridEnv(Env):
             zorder=100,
         )
 
+    def create_surrounding_patches(self):
+        """
+
+        Highlight observable surroundings for the agent
+
+        @NOTE: If agent position is (x,y) then, to properly render it, we have to pass (y,x) as center to the Circle patch.
+
+        """
+        surrounding_patches = []
+
+        is_ = [-1, 0, 1]
+        for i in is_:
+            for j in is_:
+                surrounding_patches.append(mpl.patches.Rectangle (
+                                    xy=(self.agent_xy[1]  + j, self.agent_xy[0] + i ),
+                                    width = 1,
+                                    height = 1,
+                                    facecolor='gray',
+                                    fill=True,
+                                    alpha=0.5,
+                                    zorder = 98
+                    ))
+
+        return surrounding_patches
+
     def update_agent_patch(self):
         """
         @NOTE: If agent position is (x,y) then, to properly 
         render it, we have to pass (y,x) as center to the Circle patch.
         """
         self.agent_patch.center = (self.agent_xy[1]+.5, self.agent_xy[0]+.5)
+        return None
+    
+    def update_surrounding_patches(self):
+        """
+        @NOTE: If agent position is (x,y) then, to properly 
+        render it, we have to pass (y,x) as center to the Circle patch.
+        """
+        displacement = (self.agent_patch.center[1] - self.agent_xy[1] - 0.5, self.agent_patch.center[0] -  0.5 - self.agent_xy[0])
+        for patch in self.surrounding_patches:
+            patch.xy = (patch.xy[1] - displacement[0], patch.xy[0] - displacement[1])
         return None
     
     def render_initial_frame(self):
@@ -393,10 +436,18 @@ class SimpleGridEnv(Env):
 
         # Create agent patch in start position
         self.agent_patch = self.create_agent_patch()
+        self.surrounding_patches = self.create_surrounding_patches()
+
         ax.add_patch(self.agent_patch)
+        for patch in self.surrounding_patches:
+            ax.add_patch(patch)
+
+
+        ax.set_xlim((0, self.nrow))
+        ax.set_ylim((0, self.ncol))
 
         ax.invert_yaxis()
-        
+
         return None
 
     def create_white_patch(self, x, y):
