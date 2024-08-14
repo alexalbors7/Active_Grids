@@ -164,7 +164,10 @@ class SimpleGridEnv(Env):
                [0, 1, 0],
                [0, 1, 1]])
         """
-        if isinstance(obstacle_map, list):
+        if isinstance(obstacle_map, np.array):
+            map_int = np.array(obstacle_map, dtype=int)
+            return map_int
+        elif isinstance(obstacle_map, list):
             map_str = np.asarray(obstacle_map, dtype='c')
             map_int = np.asarray(map_str, dtype=int)
             return map_int
