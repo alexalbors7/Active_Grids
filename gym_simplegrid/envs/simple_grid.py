@@ -36,7 +36,7 @@ class SimpleGridEnv(Env):
      
     The user can also decide the starting and goal positions of the agent. This can be done by through the `options` dictionary in the `reset` method. The user can specify the starting and goal positions by adding the key-value pairs(`starts_xy`, v1) and `goals_xy`, v2), where v1 and v2 are both of type int (s) or tuple (x,y) and represent the agent starting and goal positions respectively. 
     """
-    metadata = {"render_modes": ["human", "rgb_array", "ansi"], 'render_fps': 8}
+    metadata = {"render_modes": ["human", "rgb_array", "ansi"], 'render_fps': 20}
     FREE: int = 0
     OBSTACLE: int = 1
     MOVES: dict[int,tuple] = {
@@ -175,6 +175,9 @@ class SimpleGridEnv(Env):
             map_str = np.asarray(map_str, dtype='c')
             map_int = np.asarray(map_str, dtype=int)
             return map_int
+        elif isinstance(obstacle_map, np.ndarray):
+            map_int = np.array(obstacle_map, dtype=int)
+            return obstacle_map
         else:
             raise ValueError(f"You must provide either a map of obstacles or the name of an existing map. Available existing maps are {', '.join(MAPS.keys())}.")
         
@@ -215,7 +218,7 @@ class SimpleGridEnv(Env):
             f"Start position {self.start_xy} is out of bounds."
         assert self.is_in_bounds(*self.goal_xy), \
             f"Goal position {self.goal_xy} is out of bounds."
-        
+
     def to_s(self, row: int, col: int) -> int:
         """
         Transform a (row, col) point to a state in the observation space.
@@ -258,9 +261,9 @@ class SimpleGridEnv(Env):
         elif not self.is_free(x, y): # Now 1's represent lava. 
             return -10.0
         elif (x, y) == self.goal_xy:
-            return 1.0
+            return 100.0
         else:
-            return 0.0
+            return -1.0
 
     def get_obs(self) -> int:
         return self.to_s(*self.agent_xy)
@@ -314,10 +317,10 @@ class SimpleGridEnv(Env):
         return mpl.patches.Circle(
             (self.agent_xy[1]+.5, self.agent_xy[0]+.5), 
             0.3, 
-            facecolor='orange', 
+            facecolor='red', 
             fill=True, 
             edgecolor='black', 
-            linewidth=1.5,
+            linewidth=0.1,
             zorder=100,
         )
 
@@ -351,9 +354,9 @@ class SimpleGridEnv(Env):
         self.ax = ax
 
         #ax.grid(axis='both', color='#D3D3D3', linewidth=2) 
-        ax.grid(axis='both', color='k', linewidth=1.3) 
-        ax.set_xticks(np.arange(0, data.shape[1], 1))  # correct grid sizes
-        ax.set_yticks(np.arange(0, data.shape[0], 1))
+        # ax.grid(axis='both', color='k', linewidth=1.3) 
+        ax.set_xticks(np.arange(0, data.shape[1]+1, 1))  # correct grid sizes
+        ax.set_yticks(np.arange(0, data.shape[0]+1, 1))
         ax.tick_params(
             bottom=False, 
             top=False, 
@@ -363,15 +366,26 @@ class SimpleGridEnv(Env):
             labelleft=False
         ) 
 
-        # draw the grid
-        ax.imshow(
+        # # draw the grid
+        # ax.imshow(
+        #     data, 
+        #     cmap=cmap, 
+        #     norm=norm,
+        #     extent=[0, data.shape[1], data.shape[0], 0],
+        #     interpolation='none'
+        # )
+
+        # Maybe instead use colormesh:
+        ax.pcolor(
             data, 
             cmap=cmap, 
-            norm=norm,
-            extent=[0, data.shape[1], data.shape[0], 0],
-            interpolation='none'
+            norm=norm, 
+            edgecolors='w', 
+            linewidth=0.1
         )
 
+        ax.set_aspect('equal', adjustable='box')
+        
         # Create white holes on start and goal positions
         for pos in [self.start_xy, self.goal_xy]:
             wp = self.create_white_patch(*pos)
@@ -381,6 +395,8 @@ class SimpleGridEnv(Env):
         self.agent_patch = self.create_agent_patch()
         ax.add_patch(self.agent_patch)
 
+        ax.invert_yaxis()
+        
         return None
 
     def create_white_patch(self, x, y):
@@ -399,5 +415,8 @@ class SimpleGridEnv(Env):
         """
         Close the environment.
         """
+
         plt.close(self.fig)
+        
+
         sys.exit()
