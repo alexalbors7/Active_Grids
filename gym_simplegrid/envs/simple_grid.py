@@ -67,7 +67,7 @@ class SimpleGridEnv(Env):
         """
 
         # Env confinguration
-        self.obstacles = self.parse_obstacle_map(obstacle_map) #walls
+        self.obstacles = self.parse_obstacle_map(obstacle_map) # walls as np.awway
         self.nrow, self.ncol = self.obstacles.shape
 
         self.action_space = spaces.Discrete(len(self.MOVES))
@@ -112,7 +112,7 @@ class SimpleGridEnv(Env):
         # Check integrity
         self.integrity_checks()
 
-        #if self.render_mode == "human":
+        # if self.render_mode == "human":
         self.render()
 
         return self.get_obs(), self.get_info()
@@ -135,8 +135,8 @@ class SimpleGridEnv(Env):
         # Compute the reward
         self.reward = self.get_reward(target_row, target_col)
         
-        # Check if the move is valid
-        if self.is_in_bounds(target_row, target_col) and self.is_free(target_row, target_col):
+        # Check if the move is valid (now we allow stepping on walls/lava blocks with penalty)
+        if self.is_in_bounds(target_row, target_col):
             self.agent_xy = (target_row, target_col)
             self.done = self.on_goal()
 
@@ -247,11 +247,14 @@ class SimpleGridEnv(Env):
     def get_reward(self, x: int, y: int) -> float:
         """
         Get the reward of a given cell.
+
+        Modifications: We penalize each step by -1, and by -10 if stepping on penalized square. 
+
         """
         if not self.is_in_bounds(x, y):
             return -1.0
-        elif not self.is_free(x, y):
-            return -1.0
+        elif not self.is_free(x, y): # Now 1's represent lava. 
+            return -10.0
         elif (x, y) == self.goal_xy:
             return 1.0
         else:
@@ -334,8 +337,8 @@ class SimpleGridEnv(Env):
         data[self.start_xy] = 2
         data[self.goal_xy] = 3
 
-        colors = ['white', 'black', 'red', 'green']
-        bounds=[i-0.1 for i in [0, 1, 2, 3, 4]]
+        colors = ['cornsilk', 'lawngreen', 'red', 'green']
+        bounds= [i-0.1 for i in [0, 1, 2, 3, 4]]
 
         # create discrete colormap
         cmap = mpl.colors.ListedColormap(colors)
