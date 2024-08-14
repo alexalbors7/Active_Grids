@@ -49,6 +49,7 @@ class SimpleGridEnv(Env):
     def __init__(self,     
         obstacle_map: str | list[str],
         render_mode: str | None = None,
+        colors: list = ['cornsilk', 'orange', 'red', 'green']
     ):
         """
         Initialise the environment.
@@ -69,6 +70,7 @@ class SimpleGridEnv(Env):
         # Env confinguration
         self.obstacles = self.parse_obstacle_map(obstacle_map) # walls as np.awway
         self.nrow, self.ncol = self.obstacles.shape
+        self.colors = colors
 
         self.action_space = spaces.Discrete(len(self.MOVES))
         self.observation_space = spaces.Discrete(n=self.nrow*self.ncol)
@@ -164,10 +166,7 @@ class SimpleGridEnv(Env):
                [0, 1, 0],
                [0, 1, 1]])
         """
-        if isinstance(obstacle_map, np.array):
-            map_int = np.array(obstacle_map, dtype=int)
-            return map_int
-        elif isinstance(obstacle_map, list):
+        if isinstance(obstacle_map, list):
             map_str = np.asarray(obstacle_map, dtype='c')
             map_int = np.asarray(map_str, dtype=int)
             return map_int
@@ -340,11 +339,10 @@ class SimpleGridEnv(Env):
         data[self.start_xy] = 2
         data[self.goal_xy] = 3
 
-        colors = ['cornsilk', 'lawngreen', 'red', 'green']
         bounds= [i-0.1 for i in [0, 1, 2, 3, 4]]
 
         # create discrete colormap
-        cmap = mpl.colors.ListedColormap(colors)
+        cmap = mpl.colors.ListedColormap(self.colors)
         norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
 
         plt.ion()
