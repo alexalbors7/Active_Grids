@@ -398,16 +398,21 @@ class SimpleGridEnv(Env):
 
         #ax.grid(axis='both', color='#D3D3D3', linewidth=2) 
         # ax.grid(axis='both', color='k', linewidth=1.3) 
-        ax.set_xticks(np.arange(0, data.shape[1]+1, 1))  # correct grid sizes
-        ax.set_yticks(np.arange(0, data.shape[0]+1, 1))
-        ax.tick_params(
-            bottom=False, 
-            top=False, 
-            left=False, 
-            right=False, 
-            labelbottom=False, 
-            labelleft=False
-        ) 
+        ax.set_xticks(np.arange(0.5, data.shape[1]+1, 1))  # correct grid sizes
+        ax.set_yticks(np.arange(0.5, data.shape[0]+1, 1))
+        ax.set_xticklabels(np.arange(0, 11, 1))
+        ax.set_yticklabels(np.arange(0, 11, 1))
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+
+        # ax.tick_params(
+        #     bottom=False, 
+        #     top=False, 
+        #     left=False, 
+        #     right=False, 
+        #     labelbottom=False, 
+        #     labelleft=False
+        # ) 
 
         # # draw the grid
         # ax.imshow(
@@ -441,7 +446,6 @@ class SimpleGridEnv(Env):
         ax.add_patch(self.agent_patch)
         for patch in self.surrounding_patches:
             ax.add_patch(patch)
-
 
         ax.set_xlim((0, self.nrow))
         ax.set_ylim((0, self.ncol))
