@@ -5,6 +5,7 @@ from gymnasium import spaces, Env
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import sys
+import numpy as np
 
 MAPS = {
     "4x4": ["0000", "0101", "0001", "1000"],
@@ -50,7 +51,8 @@ class SimpleGridEnv(Env):
         obstacle_map: str | list[str],
         render_mode: str | None = None,
         colors: list = ['cornsilk', 'orange', 'red', 'green'],
-        iter_limit = 500
+        iter_limit = 500,
+        obs_radius: int = 1
     ):
         """
         Initialise the environment.
@@ -69,12 +71,22 @@ class SimpleGridEnv(Env):
         """
 
         # Env confinguration
-        self.obstacles = self.parse_obstacle_map(obstacle_map) # walls as np.awway
+        self.obstacles = self.parse_obstacle_map(obstacle_map).astype(int) # walls as np.awway
         self.nrow, self.ncol = self.obstacles.shape
+        self.size = np.size(self.obstacles)
         self.colors = colors
+        self.obs_radius = obs_radius
 
         self.action_space = spaces.Discrete(len(self.MOVES))
-        self.observation_space = spaces.MultiDiscrete(np.array([self.nrow, self.ncol]))
+
+        # Change to seeing its surroundings as well. Should be in env.step. 
+        position_obs = np.array([self.nrow, self.ncol])
+
+        # Should be square, with 3 possible values: 0 (floor), 1 (lava), 2 (goal)
+        surroundings_obs =  np.full((2*self.obs_radius+1, 2*self.obs_radius + 1), 3)
+
+        # Now agent receives position and surrounding information. 
+        self.observation_space = spaces.Dict({"position": spaces.MultiDiscrete(position_obs), "surroundings": spaces.MultiDiscrete(surroundings_obs)})
 
         # Rendering configuration
         self.fig = None
@@ -103,7 +115,7 @@ class SimpleGridEnv(Env):
         super().reset(seed=seed)
 
         # parse options
-        self.start_xy = (0,0) #self.parse_state_option('start_loc', options)
+        self.start_xy = (self.nrow//2,self.ncol//2) #self.parse_state_option('start_loc', options)
         self.goal_xy = (self.nrow-1, self.ncol-1) #self.parse_state_option('goal_loc', options)
 
         # initialise internal vars
@@ -120,7 +132,15 @@ class SimpleGridEnv(Env):
         # if self.render_mode == "human":
         self.render()
 
-        return np.array(list(self.agent_xy)), self.get_info()
+        state_dict = {"position" : np.array(list(self.agent_xy)), "surroundings": self.return_surroundings()}
+
+        return state_dict, self.get_info()
+    
+    def return_surroundings(self) -> np.ndarray:
+        # +1 to include endpoint
+        x, y = self.agent_xy        
+
+        return self.obstacles[x - self.obs_radius: x + self.obs_radius + 1, y - self.obs_radius: y + self.obs_radius + 1]
     
     # Want to convert observations to multidiscrete, allowing the agent to 'see' its immediate surroundings. 
     def step(self, action: int):
@@ -148,14 +168,15 @@ class SimpleGridEnv(Env):
             self.terminated = self.on_goal()
 
         self.n_iter += 1
-       
-        # if self.render_mode == "human":
+
         self.render()
         
         self.truncated = (self.n_iter > self.iter_limit)
+
+        state_dict = {"position" : np.array(list(self.agent_xy)), "surroundings": self.return_surroundings()}
         
-        return np.array(list(self.agent_xy)), self.reward, self.terminated, self.truncated, self.get_info()
-    
+        return dict(state_dict), self.reward, self.terminated, self.truncated, self.get_info()
+
     def parse_obstacle_map(self, obstacle_map) -> np.ndarray:
         """
         Initialise the grid.
@@ -208,12 +229,10 @@ class SimpleGridEnv(Env):
             return state
 
     def sample_valid_state_xy(self) -> tuple:
-        state = self.observation_space.sample()
-        pos_xy = self.to_xy(state)
-        while not self.is_free(*pos_xy):
-            state = self.observation_space.sample()
-            pos_xy = self.to_xy(state)
-        return pos_xy
+        pos, surrounding = self.observation_space.sample()
+        while not self.is_free(*pos):
+            pos, surrounding = self.observation_space.sample()
+        return (pos, surrounding)
     
     def integrity_checks(self) -> None:
         # check that goals do not overlap with walls
@@ -342,11 +361,12 @@ class SimpleGridEnv(Env):
         """
         surrounding_patches = []
 
-        is_ = [-1, 0, 1]
+        is_ = np.arange(-self.obs_radius, self.obs_radius+1, 1)
+        js_ = np.arange(-self.obs_radius, self.obs_radius+1, 1)
         for i in is_:
-            for j in is_:
+            for j in js_:
                 surrounding_patches.append(mpl.patches.Rectangle (
-                                    xy=(self.agent_xy[1]  + j, self.agent_xy[0] + i ),
+                                    xy=(self.agent_xy[0]  + i, self.agent_xy[1] + j),
                                     width = 1,
                                     height = 1,
                                     facecolor='gray',
@@ -370,9 +390,14 @@ class SimpleGridEnv(Env):
         @NOTE: If agent position is (x,y) then, to properly 
         render it, we have to pass (y,x) as center to the Circle patch.
         """
-        displacement = (self.agent_patch.center[1] - self.agent_xy[1] - 0.5, self.agent_patch.center[0] -  0.5 - self.agent_xy[0])
+        y, x = self.agent_patch.center
+        x, y = x-0.5, y-0.5
+
+        displacement = (self.agent_xy[0] - x, self.agent_xy[1] - y)
+
+        # Patches are inherently flipped, displacement isn't so flip before. 
         for patch in self.surrounding_patches:
-            patch.xy = (patch.xy[1] - displacement[0], patch.xy[0] - displacement[1])
+            patch.xy = (patch.xy[0] + displacement[1], patch.xy[1] + displacement[0])
         return None
     
     def render_initial_frame(self):
@@ -400,8 +425,8 @@ class SimpleGridEnv(Env):
         # ax.grid(axis='both', color='k', linewidth=1.3) 
         ax.set_xticks(np.arange(0.5, data.shape[1]+1, 1))  # correct grid sizes
         ax.set_yticks(np.arange(0.5, data.shape[0]+1, 1))
-        ax.set_xticklabels(np.arange(0, 11, 1))
-        ax.set_yticklabels(np.arange(0, 11, 1))
+        ax.set_xticklabels(np.arange(0, self.nrow + 1, 1))
+        ax.set_yticklabels(np.arange(0, self.ncol + 1, 1))
         ax.set_xlabel("x")
         ax.set_ylabel("y")
 
