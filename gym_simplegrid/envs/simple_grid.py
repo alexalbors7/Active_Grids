@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import sys
 import numpy as np
+import pdb
 
 MAPS = {
     "4x4": ["0000", "0101", "0001", "1000"],
@@ -40,6 +41,7 @@ class SimpleGridEnv(Env):
     metadata = {"render_modes": ["human", "rgb_array", "ansi"], 'render_fps': 30}
     FREE: int = 0
     OBSTACLE: int = 1
+
     MOVES: dict[int,tuple] = {
         0: (-1, 0), #UP
         1: (1, 0),  #DOWN
@@ -52,7 +54,9 @@ class SimpleGridEnv(Env):
         render_mode: str | None = None,
         colors: list = ['cornsilk', 'orange', 'red', 'green'],
         iter_limit = 500,
-        obs_radius: int = 1
+        obs_radius: int = 1, 
+        start_xy: tuple[int, int] | None = None,
+        goal_xy: tuple[int, int] | None = None
     ):
         """
         Initialise the environment.
@@ -71,23 +75,29 @@ class SimpleGridEnv(Env):
         """
 
         # Env confinguration
-        self.obstacles = self.parse_obstacle_map(obstacle_map).astype(int) # walls as np.awway
+        self.obstacles = self.parse_obstacle_map(obstacle_map).astype(int) # walls as np.array
         self.nrow, self.ncol = self.obstacles.shape
         self.size = np.size(self.obstacles)
         self.colors = colors
         self.obs_radius = obs_radius
 
+        # Account for change of coordinates due to wall padding
+        self.start_xy = (start_xy[0]+1, start_xy[1]+1) if start_xy is not  None else (1, 1) 
+        self.goal_xy = (goal_xy[0]+1, goal_xy[1]+1) if goal_xy is not None else (self.nrow-2, self.ncol-2) 
+
         self.action_space = spaces.Discrete(len(self.MOVES))
 
         # Change to seeing its surroundings as well. Should be in env.step. 
-        position_obs = np.array([self.nrow, self.ncol])
+        position_obs = np.array([self.nrow, self.ncol]).reshape(-1, 1)
 
-        # Should be square, with 3 possible values: 0 (floor), 1 (lava), 2 (goal)
-        surroundings_obs =  np.full((2*self.obs_radius+1, 2*self.obs_radius + 1), 3)
+        # Should be square, with 3 possible values: , 0 (floor), 1 (lava), 2 (goal), 3 (wall)
+        surroundings_obs =  np.full((2*self.obs_radius+1, 2*self.obs_radius + 1), 4).reshape(-1,1)
+
+        final_obs = np.concatenate((position_obs, surroundings_obs), axis=0).flatten()
 
         # Now agent receives position and surrounding information. 
-        self.observation_space = spaces.Dict({"position": spaces.MultiDiscrete(position_obs), "surroundings": spaces.MultiDiscrete(surroundings_obs)})
-
+        self.observation_space = spaces.MultiDiscrete(final_obs)
+        
         # Rendering configuration
         self.fig = None
         
@@ -114,9 +124,6 @@ class SimpleGridEnv(Env):
         # Set seed
         super().reset(seed=seed)
 
-        # parse options
-        self.start_xy = (self.nrow//2,self.ncol//2) #self.parse_state_option('start_loc', options)
-        self.goal_xy = (self.nrow-1, self.ncol-1) #self.parse_state_option('goal_loc', options)
 
         # initialise internal vars
         self.agent_xy = self.start_xy
@@ -132,9 +139,9 @@ class SimpleGridEnv(Env):
         # if self.render_mode == "human":
         self.render()
 
-        state_dict = {"position" : np.array(list(self.agent_xy)), "surroundings": self.return_surroundings()}
+        state = np.concatenate((np.array(list(self.agent_xy)).reshape(-1, 1), self.return_surroundings().reshape(-1, 1)), axis=0).flatten()
 
-        return state_dict, self.get_info()
+        return state, self.get_info()
     
     def return_surroundings(self) -> np.ndarray:
         # +1 to include endpoint
@@ -153,6 +160,8 @@ class SimpleGridEnv(Env):
 
         # Get the current position of the agent
         row, col = self.agent_xy
+
+
         dx, dy = self.MOVES[action]
 
         # Compute the target position of the agent
@@ -173,9 +182,9 @@ class SimpleGridEnv(Env):
         
         self.truncated = (self.n_iter > self.iter_limit)
 
-        state_dict = {"position" : np.array(list(self.agent_xy)), "surroundings": self.return_surroundings()}
+        state = np.concatenate((np.array(list(self.agent_xy)).reshape(-1, 1), self.return_surroundings().reshape(-1, 1)), axis=0).flatten()
         
-        return dict(state_dict), self.reward, self.terminated, self.truncated, self.get_info()
+        return state, self.reward, self.terminated, self.truncated, self.get_info()
 
     def parse_obstacle_map(self, obstacle_map) -> np.ndarray:
         """
@@ -197,17 +206,21 @@ class SimpleGridEnv(Env):
         if isinstance(obstacle_map, list):
             map_str = np.asarray(obstacle_map, dtype='c')
             map_int = np.asarray(map_str, dtype=int)
-            return map_int
+            
         elif isinstance(obstacle_map, str):
             map_str = MAPS[obstacle_map]
             map_str = np.asarray(map_str, dtype='c')
             map_int = np.asarray(map_str, dtype=int)
-            return map_int
+            
         elif isinstance(obstacle_map, np.ndarray):
             map_int = np.array(obstacle_map, dtype=int)
-            return obstacle_map
         else:
             raise ValueError(f"You must provide either a map of obstacles or the name of an existing map. Available existing maps are {', '.join(MAPS.keys())}.")
+        
+        # Pad to include walls (value 3)
+        map_int = np.pad(map_int, (1, 1), 'constant', constant_values = 2).astype(int)
+
+        return map_int
         
     def parse_state_option(self, state_name: str, options: dict) -> tuple:
         """
@@ -273,7 +286,7 @@ class SimpleGridEnv(Env):
         """
         Check if a target cell is in the grid bounds.
         """
-        return 0 <= row < self.nrow and 0 <= col < self.ncol
+        return 1 <= row < self.nrow-1 and 1 <= col < self.ncol-1
 
     def get_reward(self, x: int, y: int) -> float:
         """
@@ -283,9 +296,9 @@ class SimpleGridEnv(Env):
 
         """
         if not self.is_in_bounds(x, y):
-            return -1.0
+            return -2.0
         elif not self.is_free(x, y): # Now 1's represent lava. 
-            return -10.0
+            return -20.0
         elif (x, y) == self.goal_xy:
             return 100.0
         else:
@@ -295,8 +308,10 @@ class SimpleGridEnv(Env):
         return self.to_s(*self.agent_xy)
     
     def get_info(self) -> dict:
+
         return {
-            'agent_xy': self.agent_xy,
+            'position' : np.array(list(self.agent_xy)), 
+            'surroundings': self.return_surroundings(),
             'n_iter': self.n_iter,
         }
 
@@ -404,11 +419,12 @@ class SimpleGridEnv(Env):
         """
         Render the initial frame.
 
-        @NOTE: 0: free cell (white), 1: obstacle (black), 2: start (red), 3: goal (green)
+        @NOTE: Object ids: 0: free cell (black), 1: lava (orange) 2: walls (gray)
         """
+
         data = self.obstacles.copy()
-        data[self.start_xy] = 2
-        data[self.goal_xy] = 3
+        data[self.start_xy] = 3
+        data[self.goal_xy] = 4
 
         bounds= [i-0.1 for i in [0, 1, 2, 3, 4]]
 
@@ -448,11 +464,10 @@ class SimpleGridEnv(Env):
         #     interpolation='none'
         # )
 
-        # Maybe instead use colormesh:
+        # Instead use colormesh:
         ax.pcolor(
             data, 
             cmap=cmap, 
-            norm=norm, 
             edgecolors='w', 
             linewidth=0.1
         )
