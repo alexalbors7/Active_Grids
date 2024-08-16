@@ -10,7 +10,7 @@
 Active Grid is a SimpleGrid fork adapted for Semi-Supervised Reward Inference in Reinforcement Learning. It extends SimpleGrid's initial observations by allowing the agent to see the objects surrounding it, as well as its position on the grid. It also incorporates penalty blocks that may be crossed at the expense of a negative reward. In scarce reward settings, stepping over blocks allows the agent to explore further and employ SSL methods to infer transition rewards. 
 
 <p align="center">
-    <img src="img/LavaSquare.gif" width=80%/>     <img src="img/InverseTriangle.gif" width=80%/>
+    <img src="img/LavaSquare.gif" width=30%/>    <img src="img/InverseTriangle.gif" width=30%/>  <img src="img/ZigZag.gif" width=30%/>
 </p>
 
 
