@@ -18,6 +18,15 @@ It is also efficient, lightweight and has few dependencies (gymnasium, numpy, ma
 
 SimpleGrid involves navigating a grid from a Start (red tile) to a Goal (green tile) state without colliding with any Wall (black tiles) by walking over the Empty (white tiles) cells. The yellow circle denotes the agent's current position. 
 
+# SimpleGrid: SimpleGrids Environment for Semi-Supervised Learning frameworks
+
+Active Grid is a fork of SimpleGrid adapted for Semi-Supervised Reward Inference in Reinforcement Learning. It extends SimpleGrid's initial observations by allowing the agent to see the objects surrounding it, as well as its position on the grid. It also incorporates penalty blocks that may be crossed at the expense of a negative reward. 
+
+<p align="center">
+    <img src="img/LavaSquare.gif" width=80%/>
+</p>
+
+<!-- ![](img/LavaSquare.gif) -->
 
 ## Installation
 
