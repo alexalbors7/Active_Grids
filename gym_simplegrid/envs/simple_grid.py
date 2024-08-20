@@ -296,7 +296,7 @@ class SimpleGridEnv(Env):
 
         """
         if not self.is_in_bounds(x, y):
-            return -2.0
+            return -1.0
         elif not self.is_free(x, y): # Now 1's represent lava. 
             return -20.0
         elif (x, y) == self.goal_xy:
