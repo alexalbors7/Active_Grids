@@ -56,7 +56,8 @@ class SimpleGridEnv(Env):
         iter_limit = 500,
         obs_radius: int = 1, 
         start_xy: tuple[int, int] | None = None,
-        goal_xy: tuple[int, int] | None = None
+        goal_xy: tuple[int, int] | None = None,
+        ticks: bool = False
     ):
         """
         Initialise the environment.
@@ -80,6 +81,7 @@ class SimpleGridEnv(Env):
         self.size = np.size(self.obstacles)
         self.colors = colors
         self.obs_radius = obs_radius
+        self.ticks = ticks
 
         # Account for change of coordinates due to wall padding
         self.start_xy = (start_xy[0]+1, start_xy[1]+1) if start_xy is not  None else (1, 1) 
@@ -439,22 +441,23 @@ class SimpleGridEnv(Env):
 
         #ax.grid(axis='both', color='#D3D3D3', linewidth=2) 
         # ax.grid(axis='both', color='k', linewidth=1.3) 
-        ax.set_xticks(np.arange(0.5, data.shape[1]+1, 1))  # correct grid sizes
-        ax.set_yticks(np.arange(0.5, data.shape[0]+1, 1))
-        ax.set_xticklabels(np.arange(0, self.nrow + 1, 1))
-        ax.set_yticklabels(np.arange(0, self.ncol + 1, 1))
+        if self.ticks:
+            ax.set_xticks(np.arange(0.5, data.shape[1]+1, 1))  # correct grid sizes
+            ax.set_yticks(np.arange(0.5, data.shape[0]+1, 1))
+            ax.set_xticklabels(np.arange(0, self.nrow + 1, 1))
+            ax.set_yticklabels(np.arange(0, self.ncol + 1, 1))
+            
+        else:
+            ax.tick_params(
+                bottom=False, 
+                top=False, 
+                left=False, 
+                right=False, 
+                labelbottom=False, 
+                labelleft=False
+            ) 
         ax.set_xlabel("x")
         ax.set_ylabel("y")
-
-        # ax.tick_params(
-        #     bottom=False, 
-        #     top=False, 
-        #     left=False, 
-        #     right=False, 
-        #     labelbottom=False, 
-        #     labelleft=False
-        # ) 
-
         # # draw the grid
         # ax.imshow(
         #     data, 
